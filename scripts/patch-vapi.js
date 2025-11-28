@@ -1,5 +1,6 @@
 const https = require('https');
 const path = require('path');
+const readline = require('readline');
 require('dotenv').config({ path: path.resolve(__dirname, '../.env.local') });
 
 // Check for required environment variables
@@ -16,13 +17,19 @@ if (!process.env.NEXT_PUBLIC_ASSISTANT_ID) {
 const VAPI_PRIVATE_KEY = process.env.VAPI_PRIVATE_KEY;
 const ASSISTANT_ID = process.env.NEXT_PUBLIC_ASSISTANT_ID;
 
+// ===== CONFIGURATION: Set your n8n webhook URL here =====
+// Use TEST webhook during development, PRODUCTION webhook when ready
+const N8N_WEBHOOK_URL = 'https://chrisgrow.app.n8n.cloud/webhook-test/vapi-handler'; // TEST
+// const N8N_WEBHOOK_URL = 'https://chrisgrow.app.n8n.cloud/webhook/vapi-handler'; // PRODUCTION
+// ========================================================
+
 // The exact payload as specified - using template literal to avoid JSON parsing issues
 const payload = {
   name: "Kyle's AI Teammate",
   firstMessage: "Hey, it's Kyle's AI teammate. Thanks for commenting on his post. This will take about 5 to 10 minutes. Is now a good time to chat?",
   voicemailMessage: "Hello, this is Kyle's AI teammate from GROWtalent. Please click the link in your DM to restart the chat when you are ready.",
   endCallMessage: "Thank you, that's really helpful. I'll pass this to Kyle and the team. You'll get a follow-up by email or DM. Have a great day!",
-  serverUrl: "https://chrisgrow.app.n8n.cloud/webhook-test/vapi-handler",
+  serverUrl: N8N_WEBHOOK_URL,
   model: {
     provider: "openai",
     model: "gpt-4o",
