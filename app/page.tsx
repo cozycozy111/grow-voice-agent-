@@ -1,65 +1,180 @@
-import Image from "next/image";
+'use client';
 
+import { useEffect, useState, useRef, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
+import Vapi from '@vapi-ai/web';
+
+// Define the distinct states of the application
+type ViewState = 'welcome' | 'active' | 'complete';
+
+// --- INNER COMPONENT (Handles Logic & Params) ---
+function VoiceInterface() {
+  const searchParams = useSearchParams();
+  const [status, setStatus] = useState<ViewState>('welcome');
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [volumeLevel, setVolumeLevel] = useState(0);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  
+  // Ref to keep the Vapi instance persistent
+  const vapiRef = useRef<any>(null);
+
+  // Determine Assistant ID: URL Param > Env Var
+  const assistantId = searchParams.get('assistantId') || process.env.NEXT_PUBLIC_ASSISTANT_ID;
+
+  useEffect(() => {
+    if (!process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY) {
+      setErrorMsg('Missing Public Key');
+      return;
+    }
+
+    // Initialize Vapi
+    const vapiInstance = new Vapi(process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY as string);
+    vapiRef.current = vapiInstance;
+
+    // --- Event Listeners ---
+    vapiInstance.on('call-start', () => {
+      console.log('Call has started');
+      setIsConnecting(false);
+      setStatus('active');
+    });
+
+    vapiInstance.on('call-end', () => {
+      console.log('Call has ended');
+      setStatus('complete');
+    });
+
+    vapiInstance.on('volume-level', (level: number) => {
+      setVolumeLevel(level);
+    });
+
+    vapiInstance.on('error', (e: any) => {
+      console.error('Vapi Error:', e);
+      setIsConnecting(false);
+    });
+
+    // Cleanup on unmount
+    return () => {
+      vapiInstance.stop();
+    };
+  }, []);
+
+  const startInterview = async () => {
+    if (!assistantId) {
+      setErrorMsg('No Assistant ID found. Please check configuration.');
+      return;
+    }
+
+    setIsConnecting(true);
+    try {
+      await vapiRef.current.start(assistantId);
+    } catch (err) {
+      console.error('Failed to start call', err);
+      setIsConnecting(false);
+    }
+  };
+
+  const endInterview = () => {
+    vapiRef.current.stop();
+  };
+
+  // Error State
+  if (errorMsg) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-900 text-red-400">
+        <p>Error: {errorMsg}</p>
+      </div>
+    );
+  }
+
+  return (
+    <main className="flex min-h-screen flex-col items-center justify-center bg-gray-900 text-white p-4">
+      
+      {/* HEADER / BRANDING */}
+      <div className="absolute top-8 text-center">
+        <h1 className="text-2xl font-bold tracking-widest text-emerald-400">GROWtalent</h1>
+        <p className="text-gray-500 text-sm">Automated Intake System</p>
+      </div>
+
+      {/* STATE 1: WELCOME SCREEN */}
+      {status === 'welcome' && (
+        <div className="text-center space-y-8 animate-fade-in">
+          <div className="space-y-2">
+            <h2 className="text-4xl font-semibold">2026 Strategy Interview</h2>
+            <p className="text-gray-400 max-w-md mx-auto">
+              I am Kyle's AI Digital Twin. I'd like to ask you a few questions about your goals 
+              to see if we are a good fit.
+            </p>
+          </div>
+          
+          <button
+            onClick={startInterview}
+            disabled={isConnecting}
+            className={`px-8 py-4 rounded-full text-lg font-bold transition-all transform hover:scale-105 ${
+              isConnecting 
+                ? 'bg-gray-600 cursor-not-allowed' 
+                : 'bg-emerald-500 hover:bg-emerald-400 shadow-lg shadow-emerald-500/20'
+            }`}
+          >
+            {isConnecting ? 'Connecting...' : 'Start Interview'}
+          </button>
+        </div>
+      )}
+
+      {/* STATE 2: ACTIVE CALL (VISUALIZER) */}
+      {status === 'active' && (
+        <div className="relative flex items-center justify-center">
+          {/* The Orb Visualizer */}
+          <div 
+            className="w-32 h-32 bg-emerald-500 rounded-full blur-xl absolute transition-transform duration-100 ease-out"
+            style={{ 
+              transform: `scale(${1 + volumeLevel * 5})`, 
+              opacity: 0.6 
+            }}
+          />
+          <div 
+            className="w-24 h-24 bg-white rounded-full relative z-10 shadow-2xl flex items-center justify-center"
+          >
+             <div className="w-4 h-4 bg-emerald-900 rounded-full animate-pulse" />
+          </div>
+
+          <div className="absolute bottom-[-100px] text-center">
+            <p className="text-gray-400 mb-4 text-sm tracking-wide">LISTENING...</p>
+            <button 
+              onClick={endInterview}
+              className="px-6 py-2 border border-red-500/50 text-red-400 rounded-full hover:bg-red-500/10 transition-colors text-sm"
+            >
+              End Call
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* STATE 3: COMPLETE */}
+      {status === 'complete' && (
+        <div className="text-center space-y-6 animate-fade-in">
+          <div className="text-6xl">✅</div>
+          <h2 className="text-3xl font-bold">Interview Complete</h2>
+          <p className="text-gray-400 max-w-md mx-auto">
+            Thank you. I have synced your responses to our CRM. 
+            A member of my team will review your profile shortly.
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="text-emerald-400 hover:text-emerald-300 underline underline-offset-4"
+          >
+            Start Over
+          </button>
+        </div>
+      )}
+    </main>
+  );
+}
+
+// --- MAIN PAGE COMPONENT (Suspense Wrapper) ---
 export default function Home() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+    <Suspense fallback={<div className="min-h-screen bg-gray-900 flex items-center justify-center text-emerald-500">Loading...</div>}>
+      <VoiceInterface />
+    </Suspense>
   );
 }
